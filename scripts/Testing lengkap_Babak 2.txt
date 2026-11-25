@@ -1,0 +1,205 @@
+OPERATION GEOFRONT — SOAL 9–12
+Alpine Linux / GNS3 — prefix 192.243.0.0/21
+
+Paket berisi salinan lima script konfigurasi/perbaikan yang dipakai dalam
+praktikum. Simpan tiap file .sh pada /root di node sesuai foldernya.
+Jalankan dengan sh /root/soalN.sh. Kedua soal10.sh berbeda isi dan node.
+Script sabotase resmi dari asisten tidak disertakan. Jangan menjalankan
+ulang sabotase jika jaringan sudah diperbaiki atau Babak 3 sudah dimulai.
+Perintah tes di bawah dijalankan pada node yang disebut, bukan semua di satu node.
+Target sebelum/sesudah berlaku pada tahap soal terkait (sebelum Babak 3).
+
+SOAL 9 — SHIGERU
+Sebelum sabotase, di Shigeru:
+  ip -br a
+  ip route
+  ip rule
+  sysctl net.ipv4.ip_forward
+  ip route show table all > /root/routing-normal.txt
+  ip rule > /root/ip-rule-normal.txt
+  iptables-save > /root/firewall-normal.rules
+
+Di Lilith (normal 0% loss, setelah sabotase 100%, setelah perbaikan 0%):
+  ping -c 4 -W 2 192.243.4.83
+
+Di Armisael (gateway tetap berhasil saat sabotase):
+  ping -c 4 -W 2 192.243.4.81
+
+Di Shigeru, setelah sabotase untuk diagnosis:
+  ip -br a
+  ip route show table all
+  ip rule
+  ip route get 192.243.4.74
+  ip route get 192.243.4.83
+  sysctl net.ipv4.ip_forward
+  iptables -S
+  ip route show table all > /root/routing-rusak.txt
+  diff /root/routing-normal.txt /root/routing-rusak.txt
+  ip rule > /root/ip-rule-rusak.txt
+  diff /root/ip-rule-normal.txt /root/ip-rule-rusak.txt
+  iptables-save > /root/firewall-rusak.rules
+  diff /root/firewall-normal.rules /root/firewall-rusak.rules
+
+Perbaikan di Shigeru:
+  sh /root/soal9.sh
+
+Verifikasi di Shigeru:
+  ip route show table all
+  ip rule
+  sysctl net.ipv4.ip_forward
+  ip route get 192.243.4.74
+  ip route show table all > /root/routing-fixed.txt
+  diff /root/routing-normal.txt /root/routing-fixed.txt
+  ip rule > /root/ip-rule-fixed.txt
+  diff /root/ip-rule-normal.txt /root/ip-rule-fixed.txt
+
+Verifikasi akhir di Lilith:
+  ping -c 4 192.243.4.83
+
+Verifikasi akhir di Armisael:
+  ping -c 4 192.243.4.74
+  ping -c 4 192.243.4.81
+  ping -c 4 8.8.8.8
+
+Target akhir: semuanya berhasil; default via 192.243.4.129 dev eth0,
+forwarding 1; blackhole, unreachable dan policy tambahan sudah hilang.
+
+SOAL 10 — MISATO DAN GENDOU
+Sebelum sabotase, di kedua router:
+  iptables-save > /root/soal10-normal.rules
+  ip route show table all > /root/soal10-routing-normal.txt
+  ip rule > /root/soal10-iprule-normal.txt
+
+Di Unit-01 (internet 0% loss normal, 100% saat sabotase, 0% setelah perbaikan):
+  ping -c 4 -W 2 8.8.8.8
+  ping -c 4 -W 2 192.243.4.74
+
+Di Spy (selalu berhasil):
+  ping -c 4 -W 2 8.8.8.8
+  ping -c 4 -W 2 192.243.4.74
+
+Diagnosis setelah sabotase di kedua router:
+  hostname
+  ip -br a
+  ip route
+  ip rule
+  iptables -t nat -S
+  iptables -t nat -L -n -v --line-numbers
+  iptables -S
+  iptables -L FORWARD -n -v --line-numbers
+  sysctl net.ipv4.ip_forward
+  iptables-save > /root/soal10-rusak.rules
+  diff /root/soal10-normal.rules /root/soal10-rusak.rules
+  ip route show table all > /root/soal10-routing-rusak.txt
+  diff /root/soal10-routing-normal.txt /root/soal10-routing-rusak.txt
+  ip rule > /root/soal10-iprule-rusak.txt
+  diff /root/soal10-iprule-normal.txt /root/soal10-iprule-rusak.txt
+
+Perbaikan di masing-masing router dengan file khusus node:
+  sh /root/soal10.sh
+
+Verifikasi akhir di Unit-01:
+  ping -c 4 8.8.8.8
+  ping -c 4 192.243.4.74
+  ping -c 4 deb.debian.org
+
+Verifikasi akhir di Spy:
+  ping -c 4 8.8.8.8
+
+Verifikasi di kedua router:
+  iptables -t nat -S
+  iptables -t nat -L POSTROUTING -n -v
+  iptables -S
+
+Target: tidak ada SNAT di Misato, tidak ada RETURN Cage di Gendou.
+MASQUERADE hanya di Gendou eth0; INPUT/FORWARD Gendou tetap DROP.
+Counter NAT bertambah pada koneksi baru, bukan semua paket koneksi lama.
+
+SOAL 11 — MAGI-CASPER
+Konfigurasi di Casper:
+  sh /root/soal11.sh
+
+Di Lilith dan Balthasar (target 100% loss):
+  ping -c 4 -W 2 192.243.4.58
+
+Di Casper (target 0% loss):
+  ping -c 4 192.243.4.59
+  ping -c 4 192.243.4.74
+  ping -c 4 8.8.8.8
+
+Di Lilith (target exit 0 dan pesan diterima):
+  echo "Test TCP soal 11 dari Lilith" | nc -N -w 3 192.243.4.58 5000
+  echo "Exit code: $?"
+
+Di Casper:
+  tail -n 5 /root/port-5000.log
+  iptables -L INPUT -n -v --line-numbers
+  netstat -lnt
+
+Target: hanya echo-request masuk diblokir, port 5000 tetap aktif.
+
+SOAL 12 — MAGI-CASPER
+Sebelum sabotase di Casper:
+  iptables-save > /root/soal12-normal.rules
+  iptables -S
+  ip route
+  netstat -lnt
+
+Setelah sabotase di Casper:
+  ping -c 4 -W 2 8.8.8.8
+  timeout 20 apk update
+  echo "Exit code: $?"
+
+Di Unit-00:
+  nc -zv -w 3 192.243.4.58 5000
+  echo "Exit code: $?"
+
+Di Lilith:
+  ping -c 4 -W 2 192.243.4.58
+
+Diagnosis di Casper:
+  ip -br a
+  ip route
+  iptables -S
+  iptables -L INPUT -n -v --line-numbers
+  iptables -L OUTPUT -n -v --line-numbers
+  iptables -t nat -S
+  cat /etc/resolv.conf
+  netstat -lnt
+  iptables-save > /root/soal12-rusak.rules
+  diff /root/soal12-normal.rules /root/soal12-rusak.rules
+
+Perbaikan di Casper:
+  sh /root/soal12.sh
+
+Verifikasi akhir di Casper:
+  ping -c 4 8.8.8.8
+  ping -c 4 deb.debian.org
+  apk update
+  echo "Exit code: $?"
+
+Verifikasi akhir di Unit-00:
+  nc -zv -w 3 192.243.4.58 5000
+  echo "Exit code: $?"
+  echo "Test soal 12 dari Unit-00" | nc -N -w 3 192.243.4.58 5000
+
+Verifikasi akhir di Lilith dan Balthasar:
+  ping -c 4 -W 2 192.243.4.58
+
+Bukti akhir di Casper:
+  iptables -S
+  iptables -L INPUT -n -v --line-numbers
+  tail -n 5 /root/port-5000.log
+  netstat -lnt
+
+Target: ping keluar dan apk update sukses, TCP 5000 sukses dan pesan
+masuk, ping masuk tetap gagal, INPUT DROP. Alpine memakai apk update
+serta netcat-openbsd, bukan apt-get dan netcat-traditional; konfirmasi
+kesesuaian paket kepada asisten praktikum.
+
+SERAH TERIMA
+Babak 3 dapat dilanjutkan dari kondisi setelah soal 12. Jangan replay
+script soal 9–12 secara sembarangan setelah aturan Babak 3 dipasang.
+Jika topologi direstart, IP/routing router, firewall dan listener dapat
+hilang; pulihkan soal 1–8 terlebih dahulu, lalu kondisi firewall Casper
+soal 12. Ping ke Casper memang harus gagal setelah soal 11 dan 12.
